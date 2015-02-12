@@ -1701,7 +1701,7 @@ function! s:upgrade()
     elseif s:py2
       call s:upgrade_using_python(new)
     else
-      return s:err('curl executable or ruby support not found')
+      return s:err('Missing: curl executable, ruby support or python support')
     endif
   catch
     return s:err('Error upgrading vim-plug: '. v:exception)
