@@ -73,6 +73,7 @@ let s:plug_tab = get(s:, 'plug_tab', -1)
 let s:plug_buf = get(s:, 'plug_buf', -1)
 let s:mac_gui = has('gui_macvim') && has('gui_running')
 let s:is_win = has('win32') || has('win64')
+let s:py2 = has('python') && !s:is_win
 let s:ruby = has('ruby') && (v:version >= 703 || v:version == 702 && has('patch374'))
 let s:nvim = has('nvim') && !s:is_win
 let s:me = resolve(expand('<sfile>:p'))
@@ -735,7 +736,7 @@ function! s:update_impl(pull, force, args) abort
     \ 'pull':    a:pull,
     \ 'force':   a:force,
     \ 'new':     {},
-    \ 'threads': (s:ruby || s:nvim) ? min([len(todo), threads]) : 1,
+    \ 'threads': (s:py2 || s:ruby || s:nvim) ? min([len(todo), threads]) : 1,
     \ 'bar':     '',
     \ 'fin':     0
   \ }
@@ -744,13 +745,17 @@ function! s:update_impl(pull, force, args) abort
   call append(0, ['', ''])
   normal! 2G
 
-  if s:ruby && s:update.threads > 1
+  if (s:py2|| s:ruby) && s:update.threads > 1
     try
       let imd = &imd
       if s:mac_gui
         set noimd
       endif
-      call s:update_ruby()
+      if s:ruby
+        call s:update_ruby()
+      else
+        call s:update_python()
+      endif
     catch
       let lines = getline(4, '$')
       let printed = {}
@@ -966,6 +971,367 @@ while 1 " Without TCO, Vim stack is bound to explode
     break
   endif
 endwhile
+endfunction
+
+function! s:update_python()
+python << EOF
+import datetime
+import functools
+import os
+import Queue
+import re
+import shlex
+import shutil
+import subprocess
+import tempfile
+import threading as thr
+import time
+import vim
+
+# Global constants, do not modify
+G_IS_WIN = vim.eval('s:is_win') == '1'
+G_MAC_GUI = vim.eval('s:mac_gui') == '1'
+G_PULL = vim.eval('s:update.pull') == '1'
+G_MAX_Y = int(vim.eval('winheight(".")'))
+G_RETRIES = int(vim.eval('get(g:, "plug_retries", 2)')) + 1
+G_TIMEOUT = int(vim.eval('get(g:, "plug_timeout", 60)'))
+G_PROGRESS = vim.eval('s:progress_opt(1)')
+
+class CmdTimedOut(Exception):
+  pass
+class CmdFailed(Exception):
+  pass
+class InvalidURI(Exception):
+  pass
+class Action(object):
+  INSTALL, UPDATE, ERROR, DONE = ['+', '*', 'x', '-']
+
+class GLog(object):
+  """ Global logger. Writes only when debug enabled. """
+  ON = None
+  LOGDIR = None
+  @classmethod
+  def write(cls, msg):
+    if cls.ON == None:
+      cls.ON = int(vim.eval('get(g:, "plug_log_on", 0)'))
+      cls.LOGDIR = os.path.expanduser(vim.eval('get(g:, "plug_logs", "~/plug_logs")'))
+    if cls.ON:
+      if not os.path.exists(cls.LOGDIR):
+        os.makedirs(cls.LOGDIR)
+      cls._write(msg)
+  @classmethod
+  def _write(cls, msg):
+    name = thr.current_thread().name
+    fname = cls.LOGDIR + os.path.sep + name
+    with open(fname, 'ab') as flog:
+      ltime = datetime.datetime.now().strftime("%H:%M:%S.%f")
+      msg = '[{},{}] {}{}'.format(name, ltime, msg, '\n')
+      flog.write(msg)
+
+class Buffer(object):
+  """ Lock before calling write. """
+  def __init__(self, lock, num_plugs):
+    self.bar = ''
+    self.lock = lock
+    self.num_plugs = num_plugs
+
+  def where(self, name):
+    """ Helper function, given a name find first occurence in buffer lines. """
+    found, lnum = False, 0
+    matcher = re.compile('^[-+x*] {}:'.format(name))
+    for line in vim.current.buffer:
+      if matcher.search(line) != None:
+        found = True
+        break
+      lnum += 1
+
+    if not found:
+      lnum = -1
+    return lnum
+
+  def header(self):
+    """ Prints the header at the top. """
+    curbuf = vim.current.buffer
+    event = 'Updating' if G_PULL else 'Installing'
+    curbuf[0] = event + ' plugins ({}/{})'.format(len(self.bar), self.num_plugs)
+
+    num_spaces = self.num_plugs - len(self.bar)
+    curbuf[1] = '[{}{}]'.format(self.bar, num_spaces * ' ')
+
+    vim.command('normal! 2G')
+    if not G_IS_WIN:
+      vim.command('redraw')
+
+  def write(self, *args, **kwargs):
+    """ Simply synchronizes calls to write. """
+    with self.lock:
+      self._write(*args, **kwargs)
+
+  def _write(self, action, name, lines):
+    """ Main logging function, updates based on threads calling. """
+    if action == Action.ERROR:
+      self.bar += 'x'
+      vim.command("call add(s:update.errors, '{}')".format(name))
+    elif action == Action.DONE:
+      self.bar += '='
+
+    first, rest = lines[0], lines[1:]
+    msg = ['{} {}: {}'.format(action, name, first)]
+    padded_rest = ['    ' + line for line in rest]
+    msg.extend(padded_rest)
+
+    curbuf = vim.current.buffer
+    lnum = self.where(name)
+    if lnum != -1: # Found matching line num
+      del curbuf[lnum]
+      if lnum > G_MAX_Y and action in {Action.INSTALL, Action.UPDATE}:
+        lnum = 3
+    else:
+      lnum = 3
+    curbuf.append(msg, lnum)
+
+    self.header()
+
+class Command(object):
+  def __init__(self, cmd, cmd_dir=None, timeout=60, ntries=3, cb=None):
+    self.cmd = cmd
+    self.cmd_dir = cmd_dir
+    self.timeout = timeout
+    self.ntries = ntries
+    self.callback = cb
+
+  def attempt_cmd(self):
+    """ Looping call to attempt cmd ntries with a timeout. """
+    attempt = 0
+    finished = False
+    while not finished:
+      try:
+        attempt += 1
+        result = self.timeout_cmd()
+        finished = True
+      except CmdTimedOut:
+        if attempt != self.ntries:
+          time.sleep(3)
+        else:
+          raise
+
+    return result
+
+  def timeout_cmd(self):
+    """ Execute a cmd and returns output. Output is list of lines. BLOCKING.
+    Raises CmdFailed   -> return code for Popen isn't 0
+    Raises CmdTimedOut -> command exceeded timeout without new output
+    """
+    pcmd = None
+    previous_line = None
+    try:
+      tfile = tempfile.NamedTemporaryFile()
+      pcmd = subprocess.Popen(self.cmd, cwd=self.cmd_dir, stdout=tfile,
+          stderr=subprocess.STDOUT, shell=True)
+      while pcmd.poll() == None:
+        # Differen sleeps to prevent starving some writers
+        line = nonblock_read(tfile.name)
+        if line and self.callback and previous_line != line:
+          self.callback([line])
+          previous_line = line
+          time.sleep(0.5)
+        else:
+          time.sleep(0.3)
+
+        time_diff = time.time() - os.path.getmtime(tfile.name)
+        if time_diff > self.timeout:
+          raise CmdTimedOut(['TimedOut: {}'.format(self.cmd)])
+
+      result = []
+      tfile.seek(0)
+      for line in tfile:
+        result.append(line.rstrip())
+
+      if pcmd.returncode != 0:
+        msg = ['CmdFailed: {}'.format(self.cmd)]
+        msg.extend(result)
+        raise CmdFailed(msg)
+    except CmdFailed:
+      raise
+    except:
+      if pcmd != None and pcmd.poll() == None:
+        pcmd.kill()
+      raise
+
+    return result
+
+class Plugin(object):
+  """ All logic to manage plugins goes here. """
+  def __init__(self, name, args, buf, lock, cb=None):
+    self.name = name
+    self.args = args
+    self.buf = buf
+    self.lock = lock
+    self.callback = cb
+
+  def manage(self):
+    try:
+      if os.path.exists(self.args['dir']):
+        self.update()
+      else:
+        self.install()
+        with self.lock:
+          vim.command("let s:update.new['{}'] = 1".format(self.name))
+    except (CmdTimedOut, CmdFailed, InvalidURI) as exc:
+      self.write(Action.ERROR, self.name, exc.message)
+    except Exception as exc:
+      msg = ['UnexpectedException: {}'.format(exc.message)]
+      self.write(Action.ERROR, self.name, msg)
+
+  def install(self):
+    target = self.args['dir']
+    try:
+      cmd = 'git clone {} --recursive {} -b {} "{}" 2>&1'.format(
+          G_PROGRESS, self.args['uri'], self.args['branch'], target)
+      com = Command(cmd, None, G_TIMEOUT, G_RETRIES, self.callback)
+      result = com.attempt_cmd()
+      self.write(Action.DONE, self.name, result[-1:])
+    except:
+      if os.path.exists(target):
+        shutil.rmtree(target)
+      raise
+
+  def update(self):
+    match = re.compile(r'git::?@')
+    actual_uri = re.sub(match, '', self.repo_uri())
+    expect_uri = re.sub(match, '', self.args['uri'])
+    if actual_uri != expect_uri:
+      msg = ['',
+             'Invalid URI: {}'.format(actual_uri),
+             'Expected     {}'.format(expect_uri),
+             'PlugClean required.']
+      raise InvalidURI(msg)
+
+    if G_PULL:
+      cmds = ['git fetch {}'.format(G_PROGRESS),
+              'git checkout -q ' + self.args['branch'],
+              'git merge --ff-only origin/{}'.format(self.args['branch']),
+              'git submodule update --init --recursive']
+      cmd = ' 2>&1 && '.join(cmds)
+      GLog.write(cmd)
+      com = Command(cmd, self.args['dir'], G_TIMEOUT, G_RETRIES, self.callback)
+      result = com.attempt_cmd()
+      GLog.write(result)
+      self.write(Action.DONE, self.name, result[-1:])
+    else:
+      self.write(Action.DONE, self.name, ['Already installed'])
+
+  def repo_uri(self):
+    cmd = 'git rev-parse --abbrev-ref HEAD 2>&1 && git config remote.origin.url'
+    command = Command(cmd, self.args['dir'], G_TIMEOUT, G_RETRIES)
+    result = command.attempt_cmd()
+    return result[-1]
+
+  def write(self, action, name, msg):
+    GLog.write('{} {}: {}'.format(action, name, '\n'.join(msg)))
+    self.buf.write(action, name, msg)
+
+class PlugThread(thr.Thread):
+  def __init__(self, tname, args):
+    super(PlugThread, self).__init__()
+    self.tname = tname
+    self.args = args
+    self.running = True
+
+  def run(self):
+    thr.current_thread().name = self.tname
+    work_q, lock, buf = self.args
+    if G_PULL:
+      action, msg = Action.UPDATE, ['Updating ...']
+    else:
+      action, msg = Action.INSTALL, ['Installing ...']
+
+    try:
+      while self.running:
+        name, args = work_q.get_nowait()
+        GLog.write('{}: Dir {}'.format(name, args['dir']))
+        buf.write(action, name, msg)
+        callback = functools.partial(buf.write, action, name)
+        plug = Plugin(name, args, buf, lock, callback)
+        plug.manage()
+        work_q.task_done()
+    except Queue.Empty:
+      GLog.write('Queue now empty.')
+    except Exception as exc:
+      self.stop()
+      GLog.write('CRITICAL: {}'.format(exc.message))
+
+  def stop(self):
+    self.running = False
+
+class RefreshThread(thr.Thread):
+  def __init__(self, lock):
+    super(RefreshThread, self).__init__()
+    self.lock = lock
+    self.running = True
+
+  def run(self):
+    while self.running:
+      with self.lock:
+        vim.command('noautocmd normal! a')
+      time.sleep(0.2)
+
+  def stop(self):
+    self.running = False
+
+def nonblock_read(fname):
+  """ Use nonblocking read to get latest line from long cmds. """
+  line = False
+  if os.name == 'posix':
+    fread = os.open(fname, os.O_RDONLY | os.O_NONBLOCK)
+    buf = os.read(fread, 100000)
+    os.close(fread)
+    line = buf.rstrip('\r\n')
+    left = max(line.rfind('\r'), line.rfind('\n'))
+    if left != -1:
+      line = line[left+1:]
+
+  return line
+
+def main():
+  thr.current_thread().name = 'main'
+  GLog.write('')
+  if GLog.ON and os.path.exists(GLog.LOGDIR):
+    shutil.rmtree(GLog.LOGDIR)
+
+  threads = []
+  nthreads = int(vim.eval('s:update.threads'))
+  plugs = vim.eval('s:update.todo')
+  GLog.write('Plugs: {}'.format(plugs))
+  GLog.write('PULL: {}, WIN: {}, MAC: {}'.format(G_PULL, G_IS_WIN, G_MAC_GUI))
+  GLog.write('Num Threads: {}'.format(nthreads))
+
+  lock = thr.Lock()
+  buf = Buffer(lock, len(plugs))
+  work_q = Queue.Queue()
+  for work in plugs.items():
+    work_q.put(work)
+
+  GLog.write('Starting Threads')
+  for num in range(nthreads):
+    tname = 'PlugT-{0:02}'.format(num)
+    thread = PlugThread(tname, (work_q, lock, buf))
+    thread.start()
+    threads.append(thread)
+  if G_MAC_GUI:
+    rthread = RefreshThread(lock)
+    rthread.start()
+
+  GLog.write('Joining Live Threads')
+  for thread in threads:
+    thread.join()
+  if G_MAC_GUI:
+    rthread.stop()
+    rthread.join()
+  GLog.write('Cleanly Exited Main')
+
+main()
+EOF
 endfunction
 
 function! s:update_ruby()
@@ -1332,6 +1698,8 @@ function! s:upgrade()
       endif
     elseif s:ruby
       call s:upgrade_using_ruby(new)
+    elseif s:py2
+      call s:upgrade_using_python(new)
     else
       return s:err('curl executable or ruby support not found')
     endif
@@ -1358,6 +1726,15 @@ function! s:upgrade_using_ruby(new)
   File.open(VIM::evaluate('a:new'), 'w') do |f|
     f << open(VIM::evaluate('s:plug_src')).read
   end
+EOF
+endfunction
+
+function! s:upgrade_using_python(new)
+python << EOF
+import urllib
+import vim
+psrc, dest = vim.eval('s:plug_src'), vim.eval('a:new')
+urllib.urlretrieve(psrc, dest)
 EOF
 endfunction
 
