@@ -1134,9 +1134,9 @@ class Command(object):
         if line and self.callback and previous_line != line:
           self.callback([line])
           previous_line = line
-          time.sleep(0.5)
+          time.sleep(0.4)
         else:
-          time.sleep(0.3)
+          time.sleep(0.2)
 
         time_diff = time.time() - os.path.getmtime(tfile.name)
         if time_diff > self.timeout:
