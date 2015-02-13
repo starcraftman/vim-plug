@@ -986,6 +986,7 @@ import subprocess
 import tempfile
 import threading as thr
 import time
+import traceback
 import vim
 
 # Global constants, do not modify
@@ -1176,9 +1177,11 @@ class Plugin(object):
           vim.command("let s:update.new['{}'] = 1".format(self.name))
     except (CmdTimedOut, CmdFailed, InvalidURI) as exc:
       self.write(Action.ERROR, self.name, exc.message)
-    except Exception as exc:
-      msg = ['UnexpectedException: {}'.format(exc.message)]
-      self.write(Action.ERROR, self.name, msg)
+    except:
+      # Any exception except those above print stack trace
+      msg = 'Trace:\n{}'.format(traceback.format_exc())
+      self.write(Action.ERROR, self.name, msg.split('\n'))
+      raise
 
   def install(self):
     target = self.args['dir']
@@ -1254,9 +1257,6 @@ class PlugThread(thr.Thread):
         work_q.task_done()
     except Queue.Empty:
       GLog.write('Queue now empty.')
-    except Exception as exc:
-      self.stop()
-      GLog.write('CRITICAL: {}'.format(exc.message))
 
   def stop(self):
     self.running = False
