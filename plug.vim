@@ -1129,23 +1129,20 @@ class Command(object):
       pcmd = subprocess.Popen(self.cmd, cwd=self.cmd_dir, stdout=tfile,
           stderr=subprocess.STDOUT, shell=True)
       while pcmd.poll() == None:
-        # Differen sleeps to prevent starving some writers
+        # Yield this thread
+        time.sleep(0)
+
         line = nonblock_read(tfile.name)
         if line and self.callback and previous_line != line:
           self.callback([line])
           previous_line = line
-          time.sleep(0.4)
-        else:
-          time.sleep(0.2)
 
         time_diff = time.time() - os.path.getmtime(tfile.name)
         if time_diff > self.timeout:
           raise CmdTimedOut(['TimedOut: {}'.format(self.cmd)])
 
-      result = []
       tfile.seek(0)
-      for line in tfile:
-        result.append(line.rstrip())
+      result = [line.rstrip() for line in tfile]
 
       if pcmd.returncode != 0:
         msg = ['CmdFailed: {}'.format(self.cmd)]
