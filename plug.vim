@@ -296,7 +296,7 @@ endfunction
 
 function! s:esc(path)
   if s:is_win
-    return '"' . substitute(a:path, '"', '\\"') . '"'
+    return '"' . substitute(a:path, '"', '\\"', 'g') . '"'
   else
     return fnameescape(a:path)
   endif
