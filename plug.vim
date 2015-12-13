@@ -1108,6 +1108,24 @@ class InvalidURI(PlugError):
 class Action(object):
   INSTALL, UPDATE, ERROR, DONE = ['+', '*', 'x', '-']
 
+class GLog(object):
+  ON = int(vim.eval('get(g:, "plug_log_on", 1)'))
+  LOGDIR = os.path.expanduser(vim.eval('get(g:, "plug_logs", "~/plug_logs")'))
+  @classmethod
+  def write(cls, msg):
+    if cls.ON:
+      if not os.path.exists(cls.LOGDIR):
+        os.makedirs(cls.LOGDIR)
+      cls._write(msg)
+  @classmethod
+  def _write(cls, msg):
+    name = thr.current_thread().name
+    fname = cls.LOGDIR + os.path.sep + name
+    with open(fname, 'ab') as flog:
+      ltime = datetime.datetime.now().strftime("%H:%M:%S.%f")
+      msg = '[{0},{1}] {2}{3}'.format(name, ltime, msg, '\n')
+      flog.write(msg.encode())
+
 class Buffer(object):
   def __init__(self, lock, num_plugs, is_pull):
     self.bar = ''
@@ -1176,6 +1194,7 @@ class Command(object):
     self.callback = cb if cb else (lambda msg: None)
     self.clean = clean if clean else (lambda: None)
     self.proc = None
+    GLog.write('Command created: %s' % self.cmd)
 
   @property
   def alive(self):
@@ -1421,6 +1440,12 @@ def main():
   nthreads = int(vim.eval('s:update.threads'))
   plugs = vim.eval('s:update.todo')
   mac_gui = vim.eval('s:mac_gui') == '1'
+
+  try:
+    shutil.rmtree(GLog.LOGDIR)
+  except OSError:
+    pass
+  GLog.write('Threads %d' % nthreads)
 
   lock = thr.Lock()
   buf = Buffer(lock, len(plugs), G_PULL)
