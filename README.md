@@ -80,6 +80,9 @@ Plug 'https://github.com/junegunn/vim-github-dashboard.git'
 " Using a non-master branch
 Plug 'rdnetto/YCM-Generator', { 'branch': 'stable' }
 
+" Freezing plugin to commit
+Plug 'gabesoft/vim-ags', { 'commit': 'dee149c' }
+
 " Plugin options
 Plug 'nsf/gocode', { 'tag': 'v.20150303', 'rtp': 'vim' }
 
@@ -227,7 +230,7 @@ Plug 'junegunn/fzf', { 'do': g:fzf_install }
 
 ### FAQ/Troubleshooting
 
-See [FAQ/Troubleshooting](https://github.com/junegunn/vim-plug/wiki/faq).
+See [TipsFAQ/Troubleshooting](https://github.com/junegunn/vim-plug/wiki/faq).
 
 ### Articles
 
