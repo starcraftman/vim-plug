@@ -1,34 +1,5 @@
 ## Requiremens
 
-#### Short Requirements
-
-<table>
-<thead>
-<tr>
-  <th>Requirement</th>
-  <th>Minimum</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-  <td>Vim</td>
-  <td>7.0+</td>
-</tr>
-<tr>
-  <td>Git</td>
-  <td>1.7.10+</td>
-</tr>
-<tr>
-  <td>Ruby</td>
-  <td>1.8.7+</td>
-</tr>
-<tr>
-  <td>Python 2/3</td>
-  <td>2.6+</td>
-</tr>
-</tbody>
-</table>
-
 #### Vim
 
 vim-plug is known to work with Vim 7.0 or above, however 7.3+ is recommended.
@@ -58,7 +29,7 @@ If the neovim module is working, the following should work inside nvim.
 :python print 'python works'
 ```
 
-#### Vim (Ruby)
+#### Ruby (Vim Only)
 
 The ruby installer requires the ruby interpreter (1.8.7+) and vim compiled with `+ruby` support.
 
@@ -68,9 +39,9 @@ You can check it works inside vim by:
 :ruby puts 'ruby works'
 ```
 
-#### Vim (Python or Python3)
+#### Python 2 or 3
 
-The python installer requires python version >= 2.6 or 3.2+.
+The python installer requires python version >= 2.6 or any version of 3.
 Python 2.7 is recommended as many plugins still require `+python`.
 Vim must be compiled with `+python` or `+python3`.
 
@@ -88,14 +59,16 @@ The configurations below have been tested and work.
 
 #### GVim
 
-Installing GVim and required executables for Windows.
+Install GVim, python and git.
 
-1. Insall python and put it on your PATH. I suggest [Python 2.7](https://www.python.org/downloads/).
+1. Install GVim for Windows, any version with `+python` or `+python3` should do.
+  - Official [GVim](http://www.vim.org/download.php#pc)
+  - Community [build](https://tuxproject.de/projects/vim/), frequently updated to latest patch level.
+    Any version with `+python` should do.
+1. Insall a matching python and put it on your PATH. I suggest [Python 2.7](https://www.python.org/downloads/).
 1. Install git and put it on your PATH. I suggest [Git For Windows](https://git-for-windows.github.io/).
    If you use the portable version, remember to edit your PATH variable to make it available on the cmd prompt.
    If you use the installer, select "Use Git from Windows Command Prompt".
-1. Install [GVim](http://www.vim.org/download.php#pc) for Windows.
-   Any version with `+python` should do.
 
 #### msys2
 

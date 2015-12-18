@@ -230,9 +230,9 @@ Plug 'junegunn/fzf', { 'do': g:fzf_install }
 
 ### More Information and Help
 
-- The [Troubleshooting](https://github.com/junegunn/vim-plug/wiki/faq#trougleshooting) guide describes common problems and fixes.
-- The [FAQ](https://github.com/junegunn/vim-plug/wiki/faq#faq) will answer common questions.
-- See [Tips](https://github.com/junegunn/vim-plug/wiki/faq#tips) for some extra stuff not available out of box..
+- [Troubleshooting](https://github.com/junegunn/vim-plug/wiki/faq#trougleshooting) describes common problems and fixes.
+- [FAQ](https://github.com/junegunn/vim-plug/wiki/faq#faq) will answer common questions.
+- [Tips](https://github.com/junegunn/vim-plug/wiki/faq#tips) contains some extra stuff we don't intend on supporting directly.
 
 ### Articles
 
