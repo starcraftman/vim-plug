@@ -1,11 +1,37 @@
 ## Requiremens
 
-### Base Requirements
+#### Short Requirements
+
+<table>
+<thead>
+<tr>
+  <th>Requirement</th>
+  <th>Minimum</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Vim</td>
+  <td>7.0+</td>
+</tr>
+<tr>
+  <td>Git</td>
+  <td>1.7.10+</td>
+</tr>
+<tr>
+  <td>Ruby</td>
+  <td>1.8.7+</td>
+</tr>
+<tr>
+  <td>Python 2/3</td>
+  <td>2.6+</td>
+</tr>
+</tbody>
+</table>
 
 #### Vim
 
-vim-plug is known to work with Vim 7.0 or above.
-It is strongly recommended that you use 7.3 or above.
+vim-plug is known to work with Vim 7.0 or above, however 7.3+ is recommended.
 
 #### Git
 
@@ -13,33 +39,14 @@ Most of the features should work with Git 1.7 or above.
 However, installing plugins with tags is [known to fail](https://github.com/junegunn/vim-plug/issues/174) if Git is older than 1.7.10.
 Git 1.8 or greater is recommended.
 
-#### The Parallel Installers
-
-Vim-plug supports several installers.
-If more than one installer is available, they are selected in this order:
-
-1. neovim
-1. ruby
-1. python
-1. python3
-1. viml
-
-The parallel installers additional requirements in short are:
-
-1. [Neovim](https://github.com/junegunn/vim-plug/wiki/faq#neovim) with job control: `exists('*jobwait')`
-1. Vim with [Ruby](https://github.com/junegunn/vim-plug/wiki/faq#ruby) support: `has('ruby')` | Ruby 1.8.7 or above
-1. Vim with [Python](https://github.com/junegunn/vim-plug/wiki/faq#python) support: `has('python')` or has('python3') | Python 2.6 or above
-
 #### Neovim
 
-The neovim job based installer is only available when using neovim.
+Simply install [neovim](https://github.com/neovim/neovim/wiki/Installing-Neovim) to make use of the job based installer.
 The one caveat is that it is [not synchronous](https://github.com/junegunn/vim-plug/issues/104) like python or ruby installers.
 This affects you when scripting, for instance `nvim +PlugUpdate +qa`.
 In such cases vim-plug will use the python installer - which is synchronous - when available.
 
-Neovim can be [installed](https://github.com/neovim/neovim/wiki/Installing-Neovim) on many platforms.
-
-To use the python installer during start up, install the pypi neovim library.
+To use the python installer, install the pypi neovim library.
 
 ```viml
 sudo pip install neovim
@@ -53,7 +60,7 @@ If the neovim module is working, the following should work inside nvim.
 
 #### Vim (Ruby)
 
-The ruby installer requires the ruby interpreter and vim compiled with `+ruby` support.
+The ruby installer requires the ruby interpreter (1.8.7+) and vim compiled with `+ruby` support.
 
 You can check it works inside vim by:
 
@@ -63,13 +70,13 @@ You can check it works inside vim by:
 
 #### Vim (Python or Python3)
 
-The python installer requires python version >= 2.6 or python3.
-Python 2.7 is recommended as many plugins still require python2.
+The python installer requires python version >= 2.6 or 3.2+.
+Python 2.7 is recommended as many plugins still require `+python`.
 Vim must be compiled with `+python` or `+python3`.
 
 To check the interfaces work:
-- python: `:python print 'python 2 works'`
-- python3: `python print('python 3 works')`
+- `+python`: `:python print 'python 2 works'`
+- `+python3`: `:python print('python 3 works')`
 
 ## Platform Installation
 
@@ -83,9 +90,11 @@ The configurations below have been tested and work.
 
 Installing GVim and required executables for Windows.
 
-1. Insall python and put it on your PATH. For example [ActivePython 2.7](http://www.activestate.com/activepython/downloads).
-2. Install git and put it on your PATH. I suggest [Git For Windows](https://git-for-windows.github.io/). If you use the portable version, remember to edit your PATH variable to make it available on the cmd prompt. If you use the installer, it can be done for you by selecting "Use Git from Windows Command Prompt".
-3. Install [GVim](http://www.vim.org/download.php#pc) for Windows.
+1. Insall python and put it on your PATH. I suggest [Python 2.7](https://www.python.org/downloads/).
+1. Install git and put it on your PATH. I suggest [Git For Windows](https://git-for-windows.github.io/).
+   If you use the portable version, remember to edit your PATH variable to make it available on the cmd prompt.
+   If you use the installer, select "Use Git from Windows Command Prompt".
+1. Install [GVim](http://www.vim.org/download.php#pc) for Windows.
    Any version with `+python` should do.
 
 #### msys2
@@ -114,6 +123,10 @@ rvm install ruby
 rvm use ruby
 brew install vim
 ```
+
+Important note, if you compile against a partiular RVM and then change/remove it
+you may experience problems. To alleviate this compile ruby support dynamically
+or just link against the system ruby.
 
 ### Linux
 

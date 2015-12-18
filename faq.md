@@ -39,29 +39,25 @@ Plug 'https://gist.github.com/952560a43601cd9898f1.git',
 
 ### Portable Vimrc For Windows & UNIX
 
-With neovim's adoption of XDG and the traditional difference between Windows/POSIX for vimfiles
-there are now 4 possible locations for vim's configuration root.
+With neovim's adoption of XDG and the existing `vimfiles` vs `.vim` folders
+there are now 4 possible locations.
 This snippet allows the same vimrc to be used across all.
 It sets `g:vim_dir` to the correct root.
 
 ```viml
-" On Windows with cmd.exe use vimfiles, else use normal unix .vim folder
 let s:win_shell = (has('win32') || has('win64')) && &shellcmdflag =~ '/'
 if has('nvim')
   let g:vim_dir = s:win_shell ? '$USERPROFILE/AppData/Local/nvim' : '~/.config/nvim'
 else
   let g:vim_dir = s:win_shell ? '~/vimfiles' : '~/.vim'
 endif
-let g:vim_dir = expand(g:vim_dir)
 
-try
-  call plug#begin(expand(g:vim_dir . '/plugged'))
+call plug#begin(expand(g:vim_dir . '/plugged'))
 
-  Plug 'junegunn/vader.vim'
-  " More plugins ...
-catch
-  echomsg 'vim-plug is not available'
-endtry
+Plug 'junegunn/vader.vim'
+" More plugins ...
+
+call plug#end()
 ```
 
 ### Migrating from other plugin managers

@@ -228,9 +228,11 @@ let g:fzf_install = 'yes | ./install'
 Plug 'junegunn/fzf', { 'do': g:fzf_install }
 ```
 
-### FAQ/Troubleshooting
+### More Information and Help
 
-See [TipsFAQ/Troubleshooting](https://github.com/junegunn/vim-plug/wiki/faq).
+- The [Troubleshooting](https://github.com/junegunn/vim-plug/wiki/faq#trougleshooting) guide describes common problems and fixes.
+- The [FAQ](https://github.com/junegunn/vim-plug/wiki/faq#faq) will answer common questions.
+- See [Tips](https://github.com/junegunn/vim-plug/wiki/faq#tips) for some extra stuff not available out of box..
 
 ### Articles
 
